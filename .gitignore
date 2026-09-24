@@ -1,0 +1,8 @@
+.DS_Store
+.build/
+.swiftpm/
+.gstack/
+work/
+outputs/*.app/
+outputs/*.zip
+*.xcuserstate
