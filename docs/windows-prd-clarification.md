@@ -41,7 +41,7 @@ Preserve the current macOS project in place for the first Windows implementation
 
 ```text
 Sources/Ordlyd/                 # existing macOS app; avoid churn during Windows work
-windows/                         # Windows app and Windows-specific tests
+windows/                         # proposed Electron/TypeScript client and Windows-specific tests
 scripts/install-macos.sh
 scripts/install-windows.ps1      # one-command developer setup for the test PC
 docs/shared-contracts/           # JSON schemas, prompts, model manifest, fixture notes
@@ -58,7 +58,7 @@ Windows v1 is intended to cover the capabilities already present on macOS. Each 
 |---|---|---|
 | Meeting library and detail | Browse, search, reopen, export, and delete meetings | Preserve transcript, summary, decisions, actions, questions, and evidence links; each OS has its own local archive |
 | Microphone meeting capture | Record microphone audio locally | Show recording state and elapsed time; recover closed audio segments after an interrupted session |
-| Microphone + system audio | Capture both sources when the user selects the mode | Use and validate the supported Windows loopback capture path; exclude Spark's own output where possible |
+| Microphone + system audio | Capture both sources when the user selects the mode | Prove Electron loopback or Microsoft's [WASAPI loopback](https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording) on the target PC; exclude Spark's own output where possible |
 | Live transcription | Refresh a provisional transcript while recording | Reuse local Whisper and make the in-progress state clear; finalize text on stop |
 | Full transcription | Transcribe a completed or imported audio file locally | Norwegian language; report missing/corrupt model or runtime without uploading audio |
 | Dictation | Capture speech, transcribe locally, then insert at the cursor or copy as a fallback | Provide an appropriate Windows shortcut and explain any Windows permission required |
@@ -148,6 +148,27 @@ Use the owner's Windows PC as the first hardware acceptance target, then add a c
 1. **Test PC hardware:** CPU model, RAM, free storage, and GPU model/driver. (Needed to set minimum specs and decide if acceleration is in scope.)
 2. **Minimum Windows build:** Record the Windows 11 build on the test PC during the spike, then use tested support rather than assuming every Windows 11 release works.
 
+## Recommended way to start (technical direction to prove)
+
+Use the Windows 11 x64 PC as the primary development and test machine. Keep the existing SwiftUI Mac app at the repository root and add a Windows-only client under `windows/`; use the same GitHub repo and product contracts. The Windows app does not need to share meeting storage with the Mac app.
+
+**Leading option: Electron + TypeScript for the Windows client**, while leaving the current Mac app unchanged. It is a good fit for closely matching Spark's custom layout and visual design, and its main process can manage the Windows Whisper CLI, local downloads, model verification, and direct IDUN requests. Electron's official [`desktopCapturer`](https://www.electronjs.org/docs/latest/api/desktop-capturer) API exposes a loopback-audio path, but system-audio capture and permission behavior must be proven on the actual Windows 11 PC before choosing it for production.
+
+This would still be a new Windows client: SwiftUI/AppKit/ScreenCaptureKit code does not become Electron code or compile on Windows. Reuse requirements, JSON contracts, prompts, model metadata, and test fixtures; reimplement the Windows interface and platform services. If the long-term goal changes to one shared UI on Mac and Windows, migrating the Mac UI to Electron is a separate, larger decision.
+
+### First implementation spike
+
+1. On the Windows PC, clone this private repo, create a `feature/windows-client` branch, and run [Codex CLI](https://github.com/openai/codex) inside the repo so it can edit and run Windows tools in the real target environment.
+2. Create a minimal Electron shell that reproduces one representative Spark screen using the Mac app's existing spacing, colors, typography, labels, and components as reference.
+3. Download the pinned model with real byte progress, pause/resume, retry, temporary-file handling, and SHA-256 verification; run the pinned Windows `whisper-cli` on the included test WAV and confirm a Norwegian transcript.
+4. Prove microphone capture and system loopback capture independently on the target PC. Confirm the loopback path captures audio without retaining or uploading screen pixels, and test device changes and permission denial.
+5. Make a direct Windows-app-to-IDUN request using a development key stored in Windows-protected storage; verify that only confirmed transcript text leaves the device and that the audio remains local.
+6. Package and launch the spike from a clean Windows user account. Record setup time, app/model disk use, transcription time, errors, and any GPU acceleration result.
+
+Use Electron [security defaults](https://www.electronjs.org/docs/latest/tutorial/security): keep Node APIs out of the renderer, enable context isolation and renderer sandboxing, validate IPC callers, and expose only narrow app operations through preload/IPC. Electron's own documentation warns that enabling `nodeIntegration` also disables renderer process sandboxing. Its [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) uses Windows DPAPI and protects stored data from other Windows users, but not from other programs running as the same user; keep the threat model and API-key handling explicit.
+
+**Go/no-go:** If microphone, loopback capture, model recovery, and the Spark-matched UI pass on the test PC with a clean install, proceed with Electron for the Windows-only client. If loopback or another required capability is unreliable, keep the PRD and contracts but evaluate a Windows-native capture layer or a native Windows client before building the full feature set.
+
 ## Implementation handoff
 
-After the open questions are answered, produce a short Windows technical spike before implementation. It should prove: Windows builds the chosen UI framework; the pinned `whisper.cpp` runtime loads this exact model; a CPU-only sample transcription works; model download/resume/checksum works; the IDUN request uses the existing request/response contract; and microphone plus system loopback capture can be implemented with the target PC's APIs. Then turn the results into a phased implementation plan and test checklist.
+After the remaining hardware questions are answered and the spike passes, turn the results into a phased implementation plan and a Windows acceptance checklist.
