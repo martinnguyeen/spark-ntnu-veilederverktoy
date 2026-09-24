@@ -1,16 +1,17 @@
 # Spark NTNU for Windows — PRD and clarification brief
 
-**Status:** Working draft. Product direction, first test target, and first delivery shape are confirmed; the test PC's hardware details and cross-platform record portability remain open.
+**Status:** Working draft. Product direction, local-data boundary, design parity, first test target, and first delivery shape are confirmed; the test PC's remaining hardware details are open.
 
 **Purpose:** Turn the existing macOS app into a Windows version in the same GitHub repository, and give the Windows PC owner a clear test plan. This document is for implementation planning; it does not prescribe the Windows UI framework before a short technical spike.
 
 ## Decisions confirmed by the product owner
 
 - Keep the macOS app and add the Windows app in the **same repository**.
-- Windows v1 should aim for **feature parity with the current Mac app**, not only a Whisper demo.
+- Windows v1 should match the current Mac app's **functionality and visual design**, not only provide a Whisper demo. Preserve the same layout, Spark styling, copy, motion, visual hierarchy, and workflow outcomes; adapt only where Windows APIs or OS-controlled dialogs require it.
 - Download the speech model automatically on first use, with visible progress, pause/resume, and retry.
 - First test target: **Windows 11 x64**.
 - First delivery shape: a **PowerShell developer setup script** in the repository, for testing on the owner's PC.
+- Keep recordings, model files, transcripts, and meeting records local on each device. Mac-to-Windows or cross-device meeting sync is **not required**.
 - Local Norwegian speech recognition is a core requirement. Audio must not silently fall back to a remote transcription service.
 
 ## User problem
@@ -55,7 +56,7 @@ Windows v1 is intended to cover the capabilities already present on macOS. Each 
 
 | Capability | Windows requirement | Notes for implementation |
 |---|---|---|
-| Meeting library and detail | Browse, search, reopen, export, and delete meetings | Preserve transcript, summary, decisions, actions, questions, and evidence links |
+| Meeting library and detail | Browse, search, reopen, export, and delete meetings | Preserve transcript, summary, decisions, actions, questions, and evidence links; each OS has its own local archive |
 | Microphone meeting capture | Record microphone audio locally | Show recording state and elapsed time; recover closed audio segments after an interrupted session |
 | Microphone + system audio | Capture both sources when the user selects the mode | Use and validate the supported Windows loopback capture path; exclude Spark's own output where possible |
 | Live transcription | Refresh a provisional transcript while recording | Reuse local Whisper and make the in-progress state clear; finalize text on stop |
@@ -63,9 +64,9 @@ Windows v1 is intended to cover the capabilities already present on macOS. Each 
 | Dictation | Capture speech, transcribe locally, then insert at the cursor or copy as a fallback | Provide an appropriate Windows shortcut and explain any Windows permission required |
 | Text and audio import | Import supported text and audio formats | Normalize audio locally to the format required by Whisper |
 | Meeting app detection | Offer the same explicit start prompt for supported Teams, Zoom, and Meet contexts | Detection must never start recording automatically |
-| IDUN analysis | Request meeting analysis only after user confirmation | NTNU eduroam/VPN access; send transcript text, not raw audio |
+| IDUN analysis | Request meeting analysis only after user confirmation | Windows app calls NTNU IDUN directly; no Spark server/proxy; IDUN runs the model remotely; send transcript text, not raw audio |
 | API key management | Add, test, remove, and replace the key | Store through a Windows secure credential facility; never put secrets in JSON or logs |
-| Local meeting data | Save and delete meeting data on the PC | Define data folder, backup/export behavior, and cross-platform JSON compatibility |
+| Local meeting data | Save and delete meeting data on the PC | Define Windows data folder and local backup/export behavior; no cross-device sync |
 | Progress and recovery | Show real task state, elapsed time, errors, and retry options | Do not display invented percentage completion for IDUN requests |
 
 ## P0: first-run Whisper setup
@@ -85,9 +86,9 @@ The Whisper download/install experience is a release-blocking requirement.
 
 ## Privacy and security requirements
 
-- Microphone and system audio stay on the PC during recording, segmentation, recovery, and transcription.
+- All original audio stays on the PC during recording, segmentation, recovery, and local transcription. Audio files are not synchronized or uploaded to a Spark service.
 - Never upload raw audio or automatically switch to a hosted speech-recognition service.
-- Before IDUN analysis, state that transcript text will be sent to NTNU IDUN and require explicit confirmation.
+- Before IDUN analysis, state that transcript text will be sent directly from the Windows app to NTNU IDUN for remote analysis, and require explicit confirmation. No Spark server or proxy is involved.
 - Require eduroam or NTNU VPN for IDUN, with a recoverable network error and a way to retry after connecting.
 - Store the API key in Windows Credential Manager or an equivalent OS-protected store. Redact it from diagnostics and logs.
 - Ask for recording permissions at the point of use, show an unmistakable recording indicator, and require a user action before capture begins.
@@ -125,9 +126,9 @@ The Whisper download/install experience is a release-blocking requirement.
 
 ### Meeting workflow and safety
 
-- Windows can create, reopen, search, export, and delete meeting records using the documented JSON contract.
+- Windows can create, reopen, search, export, and delete meeting records locally using the documented JSON contract. Mac and Windows do not sync their meeting stores.
 - App detection only displays a prompt; it never starts recording by itself.
-- IDUN sends transcript text only after confirmation, stores the API key securely, and succeeds when eduroam/VPN is connected.
+- The Windows app sends transcript text directly to IDUN only after confirmation, stores the API key securely, and succeeds when eduroam/VPN is connected. Raw audio remains local.
 - Unsupported or denied microphone/system-audio permissions explain how to recover.
 
 ## Windows test plan
@@ -145,8 +146,7 @@ Use the owner's Windows PC as the first hardware acceptance target, then add a c
 ## Open questions before the implementation plan is locked
 
 1. **Test PC hardware:** CPU model, RAM, free storage, and GPU model/driver. (Needed to set minimum specs and decide if acceleration is in scope.)
-2. **Cross-platform records:** Should a meeting created on macOS be openable on Windows by copying/exporting its data, and vice versa? There is no cloud-sync requirement established here.
-3. **Minimum Windows build:** Record the Windows 11 build on the test PC during the spike, then use tested support rather than assuming every Windows 11 release works.
+2. **Minimum Windows build:** Record the Windows 11 build on the test PC during the spike, then use tested support rather than assuming every Windows 11 release works.
 
 ## Implementation handoff
 
