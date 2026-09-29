@@ -1,0 +1,26 @@
+name: Windows client
+on:
+  push:
+    paths: ['windows/**', 'docs/shared-contracts/**', 'scripts/install-windows.ps1', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['windows/**', 'docs/shared-contracts/**', 'scripts/install-windows.ps1', '.github/workflows/windows.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - run: npx --yes pnpm@11.25.0 install --frozen-lockfile --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - run: node node_modules/typescript/bin/tsc --noEmit
+      - run: node --import tsx --test tests/*.test.ts
+      - run: node scripts/build.mjs
+      - run: node scripts/smoke.mjs
+      - run: node scripts/package.mjs

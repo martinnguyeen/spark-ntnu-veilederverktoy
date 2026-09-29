@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; media-src 'self' blob:; worker-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Spark NTNU</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <header class="brand"><div><strong>Spark<span>*</span></strong> <b>NTNU</b></div><button id="settings-open" class="icon" title="Innstillinger" aria-label="Åpne innstillinger">⚙</button></header>
+    <div class="subtitle">veilederverktøy <span class="badge">Windows · 0.2</span></div>
+    <section class="record-card">
+      <div class="row"><b>Nytt opptak</b><small id="ready-label">Kontrollerer …</small></div>
+      <div id="detected" class="notice" hidden><b id="detected-label"></b><p>Vil du ta opp møtet?</p><button id="detected-dismiss">Ikke nå</button><button id="detected-start">Start opptak</button></div>
+      <fieldset class="segmented"><legend class="sr-only">Lydkilde</legend><label><input type="radio" name="mode" value="microphone" checked>Mikrofon</label><label><input type="radio" name="mode" value="system">+ systemlyd</label></fieldset>
+      <p id="system-hint" class="small" hidden>Systemlyd tar med lyd fra PC-ens lydutgang, også varsler. Bruk gjerne hodetelefoner.</p>
+      <button id="record" class="primary wide">◉ &nbsp; Start møte</button>
+      <p id="capture-state" class="small" hidden></p>
+      <button id="cancel-recording" hidden>Avbryt opptaket</button>
+      <div class="row"><button id="import-text">Importer tekst</button><button id="import-audio">Importer lydfil</button></div>
+      <button id="test-idun" class="wide">Test IDUN-tilkobling</button>
+      <label class="small" for="analysis-mode">Analysemodell</label>
+      <select id="analysis-mode"><option value="auto">Automatisk – anbefalt</option><option value="borealis">Borealis først – eksperimentell</option></select>
+      <p class="small">Velger Mistral, Kimi eller GLM etter størrelsen på møtet.</p>
+      <button id="dictate" class="shortcut"><span class="key">D</span><span><b>Hurtigdiktering</b><small>Ctrl + Shift + D · kopier og lim inn</small></span></button>
+      <div class="shortcut"><span class="key">↵</span><span><b>Møteopptak</b><small>Ctrl + Shift + Space · start / fullfør</small></span></div>
+    </section>
+    <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Søk i møter" aria-label="Søk i møter"></label>
+    <div class="library-label">DINE MØTER <span id="meeting-count">0</span></div>
+    <nav id="meetings" aria-label="Møtebibliotek"></nav>
+    <footer class="privacy">▣ &nbsp; Lyd og møter lagres på denne PC-en</footer>
+  </aside>
+  <main id="detail"></main>
+  <div id="status" role="status" aria-live="polite" hidden><span id="status-text"></span><button id="status-close" aria-label="Lukk melding">×</button></div>
+  <section id="live" hidden><div class="row"><b><span class="record-dot"></span> Direkte transkripsjon</b><span id="elapsed">00:00</span></div><p id="live-text">Lytter. Første tekst kommer etter et avsluttet lydsegment …</p><small>Foreløpig tekst kan bli rettet når opptaket stoppes.</small></section>
+  <dialog id="settings">
+    <p id="settings-message" class="notice" role="status" hidden></p>
+    <header class="row"><div><span class="eyebrow">SPARK NTNU</span><h1>La oss gjøre klart.</h1></div><button id="settings-close" class="icon" aria-label="Lukk innstillinger">×</button></header>
+    <p class="intro">Norsk transkripsjon på din egen PC.<br>Lydfilene dine forlater aldri maskinen.</p>
+    <section class="setup-section"><div class="step">1</div><div class="grow"><h2>Lokal talegjenkjenning</h2><p>NB-Whisper fra Nasjonalbiblioteket og Whisper CPU-runtime. Lastes ned fra Hugging Face og GitHub. Omtrent 470 MiB nedlasting; ha minst 650 MB ledig plass.</p><p class="small">Vanlig internett er nok. Du trenger ikke NTNU VPN.</p><div id="download-label" role="status">Kontrollerer lokale filer …</div><progress id="download-progress" max="1" value="0"></progress><div class="button-wrap"><button id="setup-start" class="accent">Last ned og klargjør</button><button id="setup-pause">Pause</button><button id="setup-cancel">Avbryt nedlasting</button><button id="setup-check">Kontroller filer</button><button id="setup-remove">Fjern modell</button></div></div></section>
+    <section class="setup-section"><div class="step">2</div><div class="grow"><h2>NTNU IDUN <span class="badge">Valgfritt</span></h2><p>Oppsummer møter med IDUN når du ønsker det. Transkripsjon sendes bare etter bekreftelse. Krever eduroam eller NTNU VPN.</p><button id="key-page" class="text-button">Be om API-nøkkel ↗</button><label for="api-key">API-nøkkel</label><input id="api-key" type="password" autocomplete="off" placeholder="Lim inn nøkkelen din"><p id="key-status" class="small"></p><div class="button-wrap"><button id="key-save">Lagre nøkkel</button><button id="key-test">Test tilkobling</button><button id="key-remove">Fjern nøkkel</button></div><small>Nøkkelen beskyttes med Windows DPAPI for din brukerkonto.</small></div></section>
+    <section class="setup-section"><div class="step">3</div><div class="grow"><h2>Innstillinger og diagnostikk</h2><label class="checkbox"><input id="detect-toggle" type="checkbox">Foreslå opptak når Teams, Zoom eller Meet oppdages</label><p class="small">Ser bare etter vindustitler. Starter aldri opptak automatisk.</p><div class="button-wrap"><button id="open-folder">Åpne lokal datamappe</button><button id="diagnostics">Vis diagnostikk</button></div><pre id="diagnostic-output" hidden></pre><p class="small">Ta lokal sikkerhetskopi av datamappen når appen er lukket. Eksporter enkeltmøter som Markdown eller JSON fra møtesiden.</p></div></section>
+    <p class="small">Som på Mac slettes rålyd automatisk sju dager etter vellykket transkripsjon. Møtenotatene beholdes. Avbrutte opptak beholdes for gjenoppretting.</p>
+    <button id="settings-done" class="primary wide">Fortsett til Spark</button>
+    <div class="button-wrap"><button id="delete-all">Slett alle møter …</button></div>
+  </dialog>
+  <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-heading">Endre tittel</h2><label for="edit-value" id="edit-label">Tittel</label><input id="edit-value" required maxlength="500"><div class="button-wrap"><button value="cancel" formnovalidate>Avbryt</button><button id="edit-save" value="save" class="accent">Lagre</button></div></form></dialog>
+  <script src="renderer.js"></script>
+</body>
+</html>

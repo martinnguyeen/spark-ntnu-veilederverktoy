@@ -38,7 +38,19 @@ The project uses Swift Package Manager and has no external Swift package depende
 
 ## Windows version
 
-The Windows app is planned for this same repository. The [Windows PRD and clarification brief](docs/windows-prd-clarification.md) records the confirmed scope, platform-specific constraints, first-run Whisper setup requirements, acceptance criteria, and remaining questions before a Windows technical spike.
+**Norsk installasjons- og testveiledning: [README for Windows](README-WINDOWS.md).** Følg denne for konkrete terminalkommandoer, førstegangstest og feilsøking.
+
+The Windows 11 x64 developer client is in `windows/`. Build and launch it from PowerShell in the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1
+```
+
+The script installs a pinned per-user Node runtime, restores locked dependencies, builds the client, and creates a runnable folder under `windows/release/`. It does not require administrator permissions. First launch offers a verified Norwegian Whisper model/runtime download with pause, resume, retry and progress. To provision these from the setup script as well, add `-ProvisionModel`. Add `-NoLaunch` to build without starting the app, or `-CheckOnly` for a read-only setup check.
+
+Recordings, meetings, the speech model, and the DPAPI-protected IDUN key are stored under `%LOCALAPPDATA%\SparkNTNU`, outside this repository. Transcription is local; IDUN analysis requires explicit confirmation. Mac and Windows archives do not sync.
+
+See the [Windows guide](windows/README.md), [implementation and acceptance report](docs/windows-acceptance.md), and [original PRD](docs/windows-prd-clarification.md). This is an unsigned developer build. Real microphone/system audio, meeting applications, IDUN over NTNU VPN, and clean-account installation remain release gates.
 
 ## Distribution
 

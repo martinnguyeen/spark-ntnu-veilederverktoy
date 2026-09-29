@@ -1,0 +1,12 @@
+import { build } from 'esbuild';
+import { mkdir, copyFile } from 'node:fs/promises';
+await mkdir('dist', { recursive: true });
+await import('./icon.mjs');
+await build({ entryPoints: ['src/main.ts'], bundle: true, platform: 'node', target: 'node22', external: ['electron'], outfile: 'dist/main.cjs' });
+await build({ entryPoints: ['src/preload.ts'], bundle: true, platform: 'node', target: 'node22', external: ['electron'], outfile: 'dist/preload.cjs' });
+await build({ entryPoints: ['src/bar-preload.ts'], bundle: true, platform: 'node', target: 'node22', external: ['electron'], outfile: 'dist/bar-preload.cjs' });
+await build({ entryPoints: ['src/renderer.ts'], bundle: true, platform: 'browser', target: 'chrome140', outfile: 'dist/renderer.js' });
+for (const name of ['index.html', 'styles.css', 'capture-worklet.js', 'bar.html', 'bar.css', 'bar.js']) await copyFile(`src/${name}`, `dist/${name}`);
+await copyFile('../Assets/SparkMerke1.svg', 'dist/spark.svg');
+await copyFile('../Assets/AppIcon.xcassets/AppIcon.appiconset/icon_256x256.png', 'dist/spark.png');
+await copyFile('../docs/shared-contracts/idun-system-prompt.txt', 'dist/idun-system-prompt.txt');

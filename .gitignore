@@ -6,3 +6,9 @@ work/
 outputs/*.app/
 outputs/*.zip
 *.xcuserstate
+windows/node_modules/
+windows/dist/
+windows/release/
+windows/.test-data/
+windows/.tools/
+windows/test-results/

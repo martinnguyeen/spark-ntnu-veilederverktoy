@@ -1,0 +1,19 @@
+{
+  "model": {
+    "id": "NbAiLab/nb-whisper-small-beta",
+    "revision": "236fdd5aada308e0fb81fcaf1658807cfd27f4f0",
+    "url": "https://huggingface.co/NbAiLab/nb-whisper-small-beta/resolve/236fdd5aada308e0fb81fcaf1658807cfd27f4f0/ggml-model.bin",
+    "size": 487601984,
+    "sha256": "35b3f1e98355c5cf80ca261a2b44934edd9ea94aa1104725d563e16dbb4e7b0b",
+    "license": "CC-BY-4.0",
+    "attribution": "National Library of Norway AI Lab"
+  },
+  "runtime": {
+    "id": "ggml-org/whisper.cpp",
+    "revision": "v1.8.7",
+    "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.7/whisper-bin-x64.zip",
+    "size": 4386743,
+    "sha256": "d9627486e1c34a03745880485593473e047294260ce9a3cb0aa8deaf15b99af6",
+    "license": "MIT"
+  }
+}

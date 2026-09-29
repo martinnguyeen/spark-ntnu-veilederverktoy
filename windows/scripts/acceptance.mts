@@ -1,0 +1,15 @@
+import { Runtime } from '../src/runtime.ts';
+import { AudioService } from '../src/audio.ts';
+import { Repository } from '../src/storage.ts';
+import { join, resolve } from 'node:path';
+import assert from 'node:assert/strict';
+const root = process.env.SPARK_TEST_DATA;
+if (!root) throw new Error('Set SPARK_TEST_DATA to the isolated provisioned acceptance folder.');
+const runtime = new Runtime(root, () => {});
+assert.equal(await runtime.check(), true, 'Verified model and runtime required');
+const service = new AudioService(new Repository(join(root, 'Meetings')), runtime, () => {});
+const started = Date.now();
+const segments = await service.transcribe(resolve('tests/fixtures/norwegian-synthetic.wav'));
+const text = segments.map(s => s.text).join(' ');
+assert.ok(segments.length > 0); assert.match(text.toLowerCase(), /fredag/); assert.match(text.toLowerCase(), /utkast/);
+console.log(JSON.stringify({ elapsedSeconds: (Date.now() - started) / 1000, segments: segments.length, transcript: text, backend: 'CPU, -ng, language no' }, null, 2));

@@ -1,0 +1,27 @@
+{
+  "name": "spark-ntnu-windows",
+  "productName": "Spark NTNU",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Lokalt veilederverktøy for Windows",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "start": "electron .",
+    "dev": "node scripts/build.mjs && electron .",
+    "package": "node scripts/package.mjs",
+    "test:ui": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.15",
+    "electron": "44.4.5",
+    "esbuild": "0.28.2",
+    "playwright": "1.58.2",
+    "resedit": "3.1.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}
