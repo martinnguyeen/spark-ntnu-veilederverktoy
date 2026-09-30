@@ -71,6 +71,7 @@ final class AppStore: ObservableObject {
     private var cancelRecordingWhenStartCompletes = false
     private var meetingDetectionController: MeetingDetectionController?
     private var meetingPromptController: MeetingPromptController?
+    private var retentionTimer: Timer?
     private var activeRecordingTitle = "Nytt lydopptak"
     enum AudioMode: String, CaseIterable, Identifiable { case microphone = "Kun mikrofon", digital = "Mikrofon + systemlyd"; var id: Self { self } }
     init(
@@ -98,6 +99,9 @@ final class AppStore: ObservableObject {
         shortcutController = shortcuts
         recordingShortcutController = recordingShortcuts
         dictationCoordinator = dictation
+        if let expiredIDs = try? repository.purgeExpired() {
+            for id in expiredIDs { try? recordingCatalog.deleteArtifacts(for: id) }
+        }
         let stored = (try? repository.loadAll()) ?? []
         meetings = stored
         selection = stored.first?.id
@@ -119,6 +123,9 @@ final class AppStore: ObservableObject {
         if enableBackgroundRecovery {
             recordingCatalog.enforceRetention()
             Task { await recoverInterruptedRecordings() }
+            retentionTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.enforceMeetingRetention() }
+            }
         }
         if enableFloatingRecordingBar { recordingBarController = FloatingRecordingBarController(store: self) }
         if enableMeetingDetection {
@@ -185,6 +192,7 @@ final class AppStore: ObservableObject {
     func acceptDetectedMeeting() async {
         guard let meeting = detectedMeeting, !isRecording, !isProcessing else { return }
         activeRecordingTitle = meeting.suggestedTitle
+        audioMode = .digital
         dismissDetectedMeeting()
         await startRecording()
     }
@@ -224,7 +232,7 @@ final class AppStore: ObservableObject {
                 try repository.save(meeting)
                 try recordingCatalog.markTranscriptionSucceeded(for: artifact.meetingID)
                 liveSegments = []
-                statusMessage = "Transkripsjonen er klar. Segmentert lyd kan gjenopprettes og slettes automatisk etter sju dager."
+                statusMessage = "Transkripsjonen er klar. Råopptaket slettes etter sju dager, og møteinnholdet etter 14 dager."
             } catch {
                 statusMessage = "Opptaket er bevart for gjenoppretting: \(error.localizedDescription)"
             }
@@ -459,6 +467,21 @@ final class AppStore: ObservableObject {
         }
         isProcessing = false
     }
+
+    private func enforceMeetingRetention() {
+        do {
+            let expiredIDs = try repository.purgeExpired()
+            guard !expiredIDs.isEmpty else { return }
+            for id in expiredIDs { try? recordingCatalog.deleteArtifacts(for: id) }
+            meetings.removeAll { expiredIDs.contains($0.id) }
+            if let selection, expiredIDs.contains(selection) { self.selection = meetings.first?.id }
+            statusMessage = expiredIDs.count == 1
+                ? "Et møte eldre enn 14 dager og tilhørende opptak ble slettet lokalt."
+                : "\(expiredIDs.count) møter eldre enn 14 dager og tilhørende opptak ble slettet lokalt."
+        } catch {
+            statusMessage = "Automatisk sletting av utløpte møter feilet: \(error.localizedDescription)"
+        }
+    }
 }
 
 struct ContentView: View {
@@ -493,7 +516,7 @@ struct ContentView: View {
             if let meeting = store.detectedMeeting {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(meeting.kind.detectionTitle, systemImage: "video.fill").font(.caption.weight(.semibold)).foregroundStyle(SparkPalette.ink)
-                    Text("Velg mikrofon eller mikrofon + systemlyd. macOS kan be om opptakstillatelse første gang.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Når du starter, velges mikrofon + systemlyd slik at både din stemme og møtelyden tas opp lokalt.").font(.caption2).foregroundStyle(.secondary)
                     HStack {
                         Button("Ikke nå") { store.dismissDetectedMeeting() }
                         Spacer()
@@ -504,6 +527,10 @@ struct ContentView: View {
                 .background(SparkPalette.mist, in: RoundedRectangle(cornerRadius: 13))
             }
             Picker("Lydkilde", selection: $store.audioMode) { ForEach(AppStore.AudioMode.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().pickerStyle(.segmented)
+            if store.audioMode == .digital {
+                Text("Bruker mikrofonen som er valgt i macOS, inkludert tilkoblet Bluetooth. Systemlyd kan også inneholde annen lyd fra Mac-en.")
+                    .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            }
             if store.isRecording {
                 Label(store.audioMode == .digital ? "Tar opp mikrofon og møtelyd" : "Tar opp mikrofon", systemImage: store.audioMode == .digital ? "macbook.and.iphone" : "mic.fill")
                     .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
@@ -541,6 +568,8 @@ struct ContentView: View {
                 }
                 Spacer()
             }
+            Text("Lyd behandles lokalt. Råopptak slettes etter 7 dager; transkripsjon og analyse etter 14 dager. Eksporterte filer og sikkerhetskopier fjernes ikke. IDUN mottar tekst kun når du ber om oppsummering.")
+                .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }.padding(14).background(.white, in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(SparkPalette.stone)).shadow(color: .black.opacity(0.04), radius: 14, y: 6)
     }
     private func format(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }

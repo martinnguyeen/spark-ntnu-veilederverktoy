@@ -1,14 +1,25 @@
 import Foundation
 
+protocol MeetingRetentionClock {
+    var now: Date { get }
+}
+
+struct SystemMeetingRetentionClock: MeetingRetentionClock {
+    var now: Date { .now }
+}
+
 protocol MeetingRepository {
     func loadAll() throws -> [Meeting]
+    func purgeExpired() throws -> [UUID]
     func save(_ meeting: Meeting) throws
     func delete(_ id: UUID) throws
     func deleteAll() throws
 }
 
 struct JSONMeetingRepository: MeetingRepository {
+    static let retentionInterval: TimeInterval = 14 * 24 * 60 * 60
     let root: URL
+    private let clock: any MeetingRetentionClock
     static var applicationDefault: JSONMeetingRepository {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return JSONMeetingRepository(root: support.appendingPathComponent("Ordlyd/Meetings", isDirectory: true))
@@ -16,15 +27,50 @@ struct JSONMeetingRepository: MeetingRepository {
     private let encoder: JSONEncoder = { let value = JSONEncoder(); value.dateEncodingStrategy = .iso8601; value.outputFormatting = [.prettyPrinted, .sortedKeys]; return value }()
     private let decoder: JSONDecoder = { let value = JSONDecoder.snakeCase; value.dateDecodingStrategy = .iso8601; return value }()
 
-    init(root: URL) { self.root = root }
+    init(root: URL, clock: any MeetingRetentionClock = SystemMeetingRetentionClock()) {
+        self.root = root
+        self.clock = clock
+    }
     func directory(for id: UUID) -> URL { root.appendingPathComponent(id.uuidString, isDirectory: true) }
 
     func loadAll() throws -> [Meeting] {
         guard FileManager.default.fileExists(atPath: root.path) else { return [] }
-        return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-            .compactMap { try? Data(contentsOf: $0.appendingPathComponent("meeting.json")) }
-            .compactMap { try? decoder.decode(Meeting.self, from: $0) }
-            .sorted { $0.date > $1.date }
+        _ = try? purgeExpired()
+        let folders = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        var meetings: [Meeting] = []
+        let now = clock.now
+        for folder in folders {
+            let meetingURL = folder.appendingPathComponent("meeting.json")
+            guard let data = try? Data(contentsOf: meetingURL),
+                  let meeting = try? decoder.decode(Meeting.self, from: data) else { continue }
+            guard now.timeIntervalSince(meeting.date) < Self.retentionInterval else {
+                try? FileManager.default.removeItem(at: folder)
+                continue
+            }
+            meetings.append(meeting)
+        }
+        return meetings.sorted { $0.date > $1.date }
+    }
+
+    @discardableResult
+    func purgeExpired() throws -> [UUID] {
+        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+        let folders = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        var deleted: [UUID] = []
+        let now = clock.now
+        for folder in folders {
+            guard let id = UUID(uuidString: folder.lastPathComponent),
+                  let data = try? Data(contentsOf: folder.appendingPathComponent("meeting.json")),
+                  let meeting = try? decoder.decode(Meeting.self, from: data),
+                  now.timeIntervalSince(meeting.date) >= Self.retentionInterval else { continue }
+            do {
+                try FileManager.default.removeItem(at: folder)
+                deleted.append(id)
+            } catch {
+                continue
+            }
+        }
+        return deleted
     }
 
     func save(_ meeting: Meeting) throws {
