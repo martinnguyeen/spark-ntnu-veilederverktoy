@@ -5,4 +5,5 @@
 work/
 outputs/*.app/
 outputs/*.zip
+outputs/*.dmg
 *.xcuserstate

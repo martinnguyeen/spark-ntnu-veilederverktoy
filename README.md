@@ -1,13 +1,11 @@
 # Spark NTNU – veilederverktøy
 
-Installer Spark på Mac med tre steg. Krever macOS 14 eller nyere.
+## Last ned Spark til Mac
 
-1. **Åpne Terminal.**
+1. Åpne [siste versjon av Spark](https://github.com/martinnguyeen/spark-ntnu-veilederverktoy/releases/latest).
+2. Last ned DMG-filen for Macen din, åpne den og dra Spark til **Programmer**.
+3. Åpne Spark. Bruk eduroam eller NTNU VPN, og lim inn IDUN API-nøkkelen din når appen ber om den.
 
-2. **Lim inn denne kommandoen og trykk Enter:**
+DMG-en inneholder appen og den lokale Whisper-modellen (omtrent 466 MB). Krever macOS 14 eller nyere. Velg **arm64** for Apple Silicon (M1 eller nyere) eller **x86_64** for Intel. Release-siden viser variantene som er publisert. Lokal transkripsjon kjøres på Macen; IDUN-analyse krever nettverkstilgang til NTNU.
 
-   ```sh
-   if [ ! -d "$HOME/spark-ntnu-veilederverktoy/.git" ]; then git clone https://github.com/martinnguyeen/spark-ntnu-veilederverktoy.git "$HOME/spark-ntnu-veilederverktoy"; fi && cd "$HOME/spark-ntnu-veilederverktoy" && ./scripts/install-macos.sh && open "outputs/Spark NTNU veilederverktøy.app"
-   ```
-
-3. **Vent mens Spark settes opp.** Første gang lastes Whisper-modellen ned (omtrent 466 MB), appen bygges og åpnes. Hvis macOS ber deg installere Command Line Tools, fullfør installasjonen og lim inn kommandoen én gang til. Når Spark åpnes, bruk eduroam eller NTNU VPN og lim inn IDUN API-nøkkelen din.
+Hvis macOS viser en sikkerhetsadvarsel for en usignert testversjon: kontrollklikk appen i Programmer, velg **Åpne**, og bekreft én gang til. En signert og notarisert utgivelse fjerner dette ekstra steget.
