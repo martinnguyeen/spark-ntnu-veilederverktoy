@@ -6,6 +6,8 @@ Electron/TypeScript Windows-only client. The existing Swift macOS application st
 
 ## Build and run
 
+To create the per-user Windows installer after installing dependencies, run `npm run installer`. This rebuilds the app and writes `release/installer/Spark-NTNU-Windows-x64-0.2.0-Setup.exe`. The installer includes all app files, adds Start menu/desktop shortcuts and an uninstaller, and leaves meeting data intact on uninstall. The speech model is downloaded in the app. This test installer is unsigned.
+
 From the repository root:
 
 ```powershell

@@ -38,6 +38,8 @@ The project uses Swift Package Manager and has no external Swift package depende
 
 ## Windows version
 
+[Last ned EXE for Windows 11 x64](https://github.com/martinnguyeen/spark-ntnu-veilederverktoy/releases/download/windows-v0.2.0/Spark-NTNU-Windows-x64-0.2.0-Setup.exe)
+
 **Norsk installasjons- og testveiledning: [README for Windows](README-WINDOWS.md).** Følg denne for konkrete terminalkommandoer, førstegangstest og feilsøking.
 
 The Windows 11 x64 developer client is in `windows/`. Build and launch it from PowerShell in the repository root:

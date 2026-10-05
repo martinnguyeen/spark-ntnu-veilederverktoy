@@ -2,6 +2,17 @@
 
 Denne veiledningen gjelder Windows-klienten 0.2.0 på grenen `feature/windows-client`. Målet er å teste installasjon og vanlig bruk på en Windows-maskin. Appen er en usignert testversjon. Lokal transkripsjon er testet automatisk, men fysisk mikrofon, systemlyd og faktisk IDUN-tilkobling må fortsatt verifiseres.
 
+## Rask installasjon uten terminal
+
+1. [Last ned Windows-installasjonsfilen (.exe)](https://github.com/martinnguyeen/spark-ntnu-veilederverktoy/releases/download/windows-v0.2.0/Spark-NTNU-Windows-x64-0.2.0-Setup.exe).
+2. Lukk en eventuell gammel Spark-app, kjør installasjonsfilen og følg veiviseren. Du trenger Windows 11 x64, men ikke Git, Node eller administratorrettigheter.
+3. Start Spark fra Start-menyen eller snarveien. Velg **Last ned og klargjør** i innstillingene for å hente den lokale talemodellen og runtime (omtrent 470 MiB).
+4. Følg testlisten i kapittel 5. IDUN krever fortsatt egen nøkkel og NTNU-nett/VPN.
+
+Installasjonsfilen er usignert. Følg organisasjonens IT-policy dersom Windows blokkerer kjøring. Avinstallering fjerner programmet, men beholder møtene i `%LOCALAPPDATA%\SparkNTNU`.
+
+Resten av installasjonskapitlene nedenfor gjelder bygging fra kildekoden, som et alternativ til EXE-filen.
+
 ## 1. Før du begynner
 
 - Windows 11 på en Intel/AMD-maskin (x64). Denne pakken støtter ikke Windows ARM.
