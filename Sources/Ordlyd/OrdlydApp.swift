@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import Sparkle
 
 enum SparkPalette {
     static let orange = Color(red: 242/255, green: 140/255, blue: 28/255)
@@ -17,14 +18,29 @@ enum Brand {
 @main
 struct OrdlydApp: App {
     @StateObject private var store = AppStore(enableMeetingDetection: true)
+    @StateObject private var updater = SparkleUpdater()
     var body: some Scene {
-        WindowGroup(Brand.productName) { ContentView().environmentObject(store).preferredColorScheme(.light).frame(minWidth: 980, minHeight: 680) }.windowStyle(.hiddenTitleBar)
+        WindowGroup(Brand.productName) { ContentView().environmentObject(store).environmentObject(updater).preferredColorScheme(.light).frame(minWidth: 980, minHeight: 680) }.windowStyle(.hiddenTitleBar)
         MenuBarExtra(Brand.productName, systemImage: store.isRecording ? "waveform.circle.fill" : "waveform.circle") {
             Button(store.isRecording ? "Stopp møte" : "Start møte") { store.toggleRecording() }
+            Button("Se etter oppdateringer …") { updater.checkForUpdates() }
             Divider()
             Button("Åpne Ordlyd") { NSApp.activate(ignoringOtherApps: true) }
             Button("Avslutt") { NSApp.terminate(nil) }
         }
+    }
+}
+
+@MainActor
+final class SparkleUpdater: ObservableObject {
+    private let controller = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
+
+    func checkForUpdates() {
+        controller.checkForUpdates(nil)
     }
 }
 
@@ -486,13 +502,14 @@ final class AppStore: ObservableObject {
 
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var updater: SparkleUpdater
     @State private var confirmLogout = false
     private let canvas = SparkPalette.paper
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                HStack(spacing: 7) { Text("Spark*").font(.system(size: 23, weight: .bold, design: .rounded)); Text("NTNU").font(.system(size: 15, weight: .semibold)); Spacer(); Image(systemName: "lock.fill").foregroundStyle(.secondary).help("Lyd behandles lokalt"); Menu { Button("Logg ut av IDUN", systemImage: "rectangle.portrait.and.arrow.right") { confirmLogout = true }.disabled(store.isProcessing || store.isRecording || store.isTestingIDUN) } label: { Image(systemName: "person.crop.circle").font(.system(size: 16)).frame(width: 28, height: 28).contentShape(Rectangle()) }.menuStyle(.borderlessButton).help("Konto og onboarding") }.padding(.horizontal, 20).padding(.top, 19)
-                HStack(spacing: 7) { Text("veilederverktøy"); Text("v0.16.0").padding(.horizontal, 7).padding(.vertical, 2).background(SparkPalette.mist, in: Capsule()); Spacer() }.font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
+                HStack(spacing: 7) { Text("Spark*").font(.system(size: 23, weight: .bold, design: .rounded)); Text("NTNU").font(.system(size: 15, weight: .semibold)); Spacer(); Image(systemName: "lock.fill").foregroundStyle(.secondary).help("Lyd behandles lokalt"); Menu { Button("Se etter oppdateringer …", systemImage: "arrow.clockwise") { updater.checkForUpdates() }; Divider(); Button("Logg ut av IDUN", systemImage: "rectangle.portrait.and.arrow.right") { confirmLogout = true }.disabled(store.isProcessing || store.isRecording || store.isTestingIDUN) } label: { Image(systemName: "person.crop.circle").font(.system(size: 16)).frame(width: 28, height: 28).contentShape(Rectangle()) }.menuStyle(.borderlessButton).help("Konto og oppdateringer") }.padding(.horizontal, 20).padding(.top, 19)
+                HStack(spacing: 7) { Text("veilederverktøy"); Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.16.0")").padding(.horizontal, 7).padding(.vertical, 2).background(SparkPalette.mist, in: Capsule()); Spacer() }.font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
                 recordingPanel.padding(.horizontal, 14).padding(.bottom, 16)
                 HStack { Image(systemName: "magnifyingglass").foregroundStyle(.secondary); TextField("Søk i møter", text: $store.search).textFieldStyle(.plain) }.padding(.horizontal, 13).frame(height: 38).background(.white, in: Capsule()).overlay(Capsule().stroke(SparkPalette.stone)).padding(.horizontal, 14).padding(.bottom, 10)
                 List(store.filtered, selection: $store.selection) { meeting in MeetingRow(meeting: meeting).tag(meeting.id) }.listStyle(.sidebar)

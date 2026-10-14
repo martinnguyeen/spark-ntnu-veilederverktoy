@@ -2,9 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fail() { printf '\nFEIL: %s\n' "$*" >&2; exit 1; }
+say() { printf '\n==> %s\n' "$*"; }
 APP_NAME="Spark NTNU veilederverktøy"
-VERSION="0.16.0"
-BUILD="16"
+VERSION="${VERSION:-0.16.0}"
+VERSION="${VERSION#v}"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Versjonen må være semantisk versjonering som 0.17.0."
+IFS=. read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION"
+BUILD="${BUILD:-$((10#$VERSION_MAJOR * 1000000 + 10#$VERSION_MINOR * 1000 + 10#$VERSION_PATCH))}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-$(tr -d '[:space:]' < "$ROOT/Config/SparklePublicEDKey")}"
+[[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || fail "SPARKLE_PUBLIC_ED_KEY mangler. Sett den offentlige Sparkle-nøkkelen for å bygge en app med fungerende oppdateringssjekk."
 MODEL_DIR="$HOME/Library/Application Support/Ordlyd/Models/nb-whisper-small-beta"
 MODEL_PATH="$MODEL_DIR/ggml-model.bin"
 MODEL_URL="https://huggingface.co/NbAiLab/nb-whisper-small-beta/resolve/main/ggml-model.bin"
@@ -12,9 +19,6 @@ MODEL_SHA256="35b3f1e98355c5cf80ca261a2b44934edd9ea94aa1104725d563e16dbb4e7b0b"
 CHECK_ONLY=0
 
 if [[ "${1:-}" == "--check-only" ]]; then CHECK_ONLY=1; fi
-
-fail() { printf '\nFEIL: %s\n' "$*" >&2; exit 1; }
-say() { printf '\n==> %s\n' "$*"; }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "Dette installasjonsprogrammet krever macOS."
 MACOS_VERSION="$(sw_vers -productVersion)"
@@ -82,7 +86,15 @@ APP="$ROOT/outputs/$APP_NAME.app"
 STAGING="$ROOT/outputs/.Spark-staging.app"
 rm -rf "$STAGING"
 mkdir -p "$STAGING/Contents/MacOS" "$STAGING/Contents/Resources"
+mkdir -p "$STAGING/Contents/Frameworks"
 cp "$ROOT/.build/release/Ordlyd" "$STAGING/Contents/MacOS/Ordlyd"
+SPARKLE_FRAMEWORK="$(find "$ROOT/.build/artifacts" -type d -name Sparkle.framework -print -quit 2>/dev/null || true)"
+[[ -n "$SPARKLE_FRAMEWORK" ]] || fail "Fant ikke Sparkle.framework etter bygging. Kontroller Swift Package Manager-avhengigheten."
+cp -R "$SPARKLE_FRAMEWORK" "$STAGING/Contents/Frameworks/Sparkle.framework"
+LOAD_COMMANDS="$(otool -l "$STAGING/Contents/MacOS/Ordlyd")"
+if [[ "$LOAD_COMMANDS" != *'@executable_path/../Frameworks'* ]]; then
+    install_name_tool -add_rpath '@executable_path/../Frameworks' "$STAGING/Contents/MacOS/Ordlyd"
+fi
 cp "$ROOT/Assets/AppIcon.icns" "$STAGING/Contents/Resources/AppIcon.icns"
 cat > "$STAGING/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -97,11 +109,14 @@ cat > "$STAGING/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>CFBundleVersion</key><string>$BUILD</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>SUFeedURL</key><string>https://github.com/martinnguyeen/spark-ntnu-veilederverktoy/releases/latest/download/appcast.xml</string>
+<key>SUEnableAutomaticChecks</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Spark bruker mikrofonen for lokal diktering og møtetranskripsjon.</string>
 <key>NSScreenCaptureUsageDescription</key><string>Spark kan ta opp systemlyd fra møter når du velger dette.</string>
 </dict></plist>
 PLIST
+/usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_ED_KEY" "$STAGING/Contents/Info.plist"
 chmod +x "$STAGING/Contents/MacOS/Ordlyd"
 codesign --force --deep --sign - "$STAGING"
 rm -rf "$APP"

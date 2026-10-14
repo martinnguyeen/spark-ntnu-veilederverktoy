@@ -2,9 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fail() { printf '\nFEIL: %s\n' "$*" >&2; exit 1; }
+say() { printf '\n==> %s\n' "$*"; }
 APP_NAME="Spark NTNU veilederverktøy"
-VERSION="0.16.0"
-BUILD="16"
+VERSION="${VERSION:-0.16.0}"
+VERSION="${VERSION#v}"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Versjonen må være semantisk versjonering som 0.17.0."
+IFS=. read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION"
+BUILD="${BUILD:-$((10#$VERSION_MAJOR * 1000000 + 10#$VERSION_MINOR * 1000 + 10#$VERSION_PATCH))}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-$(tr -d '[:space:]' < "$ROOT/Config/SparklePublicEDKey")}"
+[[ -n "$SPARKLE_PUBLIC_ED_KEY" ]] || fail "SPARKLE_PUBLIC_ED_KEY mangler. Sett den offentlige Sparkle-nøkkelen før du bygger en DMG som skal kunne oppdateres."
 MODEL_SHA256="35b3f1e98355c5cf80ca261a2b44934edd9ea94aa1104725d563e16dbb4e7b0b"
 MODEL_URL="https://huggingface.co/NbAiLab/nb-whisper-small-beta/resolve/main/ggml-model.bin"
 MODEL_CACHE="$ROOT/.build/release-assets/ggml-model.bin"
@@ -15,9 +22,6 @@ FRAMEWORKS="$APP/Contents/Frameworks"
 BACKENDS="$FRAMEWORKS/ggml-backends"
 RESOURCES="$APP/Contents/Resources"
 ARCH="$(uname -m)"
-
-fail() { printf '\nFEIL: %s\n' "$*" >&2; exit 1; }
-say() { printf '\n==> %s\n' "$*"; }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "DMG-byggingen krever macOS."
 [[ "$(sw_vers -productVersion | cut -d. -f1)" -ge 14 ]] || fail "Spark krever macOS 14 eller nyere."
@@ -47,6 +51,13 @@ swift build -c release --product Ordlyd
 rm -rf "$STAGING"
 mkdir -p "$APP/Contents/MacOS" "$FRAMEWORKS" "$BACKENDS" "$RESOURCES"
 cp "$ROOT/.build/release/Ordlyd" "$APP/Contents/MacOS/Ordlyd"
+SPARKLE_FRAMEWORK="$(find "$ROOT/.build/artifacts" -type d -name Sparkle.framework -print -quit 2>/dev/null || true)"
+[[ -n "$SPARKLE_FRAMEWORK" ]] || fail "Fant ikke Sparkle.framework etter bygging. Kontroller Swift Package Manager-avhengigheten."
+cp -R "$SPARKLE_FRAMEWORK" "$FRAMEWORKS/Sparkle.framework"
+LOAD_COMMANDS="$(otool -l "$APP/Contents/MacOS/Ordlyd")"
+if [[ "$LOAD_COMMANDS" != *'@executable_path/../Frameworks'* ]]; then
+    install_name_tool -add_rpath '@executable_path/../Frameworks' "$APP/Contents/MacOS/Ordlyd"
+fi
 cp "$ROOT/Assets/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 cp "$MODEL_PATH" "$RESOURCES/ggml-model.bin"
 cp "$WHISPER_BIN" "$FRAMEWORKS/whisper-cli"
@@ -93,34 +104,55 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>CFBundleVersion</key><string>$BUILD</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>SUFeedURL</key><string>https://github.com/martinnguyeen/spark-ntnu-veilederverktoy/releases/latest/download/appcast.xml</string>
+<key>SUEnableAutomaticChecks</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Spark bruker mikrofonen for lokal diktering og møtetranskripsjon.</string>
 <key>NSScreenCaptureUsageDescription</key><string>Spark kan ta opp systemlyd fra møter når du velger dette.</string>
 </dict></plist>
 PLIST
+/usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_ED_KEY" "$APP/Contents/Info.plist"
 chmod +x "$APP/Contents/MacOS/Ordlyd" "$FRAMEWORKS/whisper-cli"
 
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$FRAMEWORKS"/*.dylib "$FRAMEWORKS/whisper-cli" "$BACKENDS"/*.so
+    codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$FRAMEWORKS/Sparkle.framework"
     codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
 else
     codesign --force --deep --sign - "$APP"
 fi
+codesign --verify --deep --strict --verbose=2 "$APP"
 
 mkdir -p "$OUTPUT_DIR"
 ln -sfn /Applications "$STAGING/Applications"
 DMG="$OUTPUT_DIR/Spark-NTNU-macOS-$ARCH-$VERSION.dmg"
+ZIP="$OUTPUT_DIR/Spark-NTNU-macOS-$ARCH-$VERSION.zip"
 rm -f "$DMG"
-hdiutil create -quiet -volname "Spark NTNU" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+rm -f "$ZIP"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+        xcrun notarytool submit "$ZIP" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+        xcrun stapler staple "$APP"
+        rm -f "$ZIP"
+        ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+        xcrun stapler validate "$APP"
+        spctl --assess --type execute --verbose "$APP"
+    else
+        printf '\nADVARSEL: Appen er signert, men ikke notarisiert. Sett APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD og APPLE_TEAM_ID for notariseringssteget.\n' >&2
+    fi
+fi
+
+hdiutil create -quiet -volname "Spark NTNU" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG"
+    codesign --verify --verbose=2 "$DMG"
     if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
         xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
         xcrun stapler staple "$DMG"
-    else
-        printf '\nADVARSEL: DMG-en er signert, men ikke notarisiert. Sett APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD og APPLE_TEAM_ID for notariseringssteget.\n' >&2
+        xcrun stapler validate "$DMG"
     fi
 else
     printf '\nADVARSEL: DMG-en er ad-hoc signert. macOS kan kreve at brukeren godkjenner appen i Systeminnstillinger > Personvern og sikkerhet.\n' >&2
@@ -128,6 +160,7 @@ fi
 
 rm -rf "$STAGING"
 printf '\nDMG ferdig: %s\n' "$DMG"
+printf 'Sparkle-oppdateringsarkiv: %s\n' "$ZIP"
 printf 'Arkitektur: %s\n' "$ARCH"
 printf 'Størrelse: '
 du -h "$DMG" | awk '{print $1}'
