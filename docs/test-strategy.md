@@ -3,7 +3,7 @@
 ## Automatisert ved hver endring
 
 - Domene- og tilstandsmaskiner for møte, diktering og analyse.
-- Segmentgrenser, atomisk manifest, diskplassfeil, krasjgjenoppretting og syv dagers rålydretensjon.
+- Segmentgrenser, atomisk manifest, diskplassfeil, krasjgjenoppretting, syv dagers rålydretensjon og 14 dagers retensjon for møteinnhold.
 - Stabil sammenføying av segmenttranskripsjoner, evidanse-ID-er og endring av talernavn.
 - Lokal persistens, sletting, eksport, import og IDUN-ruting uten ekte nettverk.
 
@@ -15,7 +15,7 @@
 ## Fysiske pilotporter
 
 - Minst ett 120-minutters møte på målmaskinen, inkludert hvile/oppvåkning, lyddevice-bytte og kontrollert diskpress.
-- Den implementerte ScreenCaptureKit-miksingen testes separat i Teams, Zoom og Meet, med både lokal og ekstern taler, tillatelsesavslag og lyddevice-bytte.
+- Den implementerte ScreenCaptureKit-miksingen testes separat i Teams, Zoom og Meet, med både lokal og ekstern taler, tillatelsesavslag og lyddevice-bytte. Test innebygd mikrofon og Bluetooth-mikrofon, og bekreft at møtelyd fra systemutgangen kommer med etter bytte mellom lydruter.
 - Hurtigdiktering testes manuelt i Notes, Mail og nettleserfelt.
 - Norsk referansesett med samtykke måler ordfeil samt kritiske navn, tall, beslutninger og gjøremål.
 

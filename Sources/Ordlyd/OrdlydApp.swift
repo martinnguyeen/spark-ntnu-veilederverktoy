@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import Sparkle
 
 enum SparkPalette {
     static let orange = Color(red: 242/255, green: 140/255, blue: 28/255)
@@ -17,14 +18,29 @@ enum Brand {
 @main
 struct OrdlydApp: App {
     @StateObject private var store = AppStore(enableMeetingDetection: true)
+    @StateObject private var updater = SparkleUpdater()
     var body: some Scene {
-        WindowGroup(Brand.productName) { ContentView().environmentObject(store).preferredColorScheme(.light).frame(minWidth: 980, minHeight: 680) }.windowStyle(.hiddenTitleBar)
+        WindowGroup(Brand.productName) { ContentView().environmentObject(store).environmentObject(updater).preferredColorScheme(.light).frame(minWidth: 980, minHeight: 680) }.windowStyle(.hiddenTitleBar)
         MenuBarExtra(Brand.productName, systemImage: store.isRecording ? "waveform.circle.fill" : "waveform.circle") {
             Button(store.isRecording ? "Stopp møte" : "Start møte") { store.toggleRecording() }
+            Button("Se etter oppdateringer …") { updater.checkForUpdates() }
             Divider()
             Button("Åpne Ordlyd") { NSApp.activate(ignoringOtherApps: true) }
             Button("Avslutt") { NSApp.terminate(nil) }
         }
+    }
+}
+
+@MainActor
+final class SparkleUpdater: ObservableObject {
+    private let controller = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
+
+    func checkForUpdates() {
+        controller.checkForUpdates(nil)
     }
 }
 
@@ -71,6 +87,7 @@ final class AppStore: ObservableObject {
     private var cancelRecordingWhenStartCompletes = false
     private var meetingDetectionController: MeetingDetectionController?
     private var meetingPromptController: MeetingPromptController?
+    private var retentionTimer: Timer?
     private var activeRecordingTitle = "Nytt lydopptak"
     enum AudioMode: String, CaseIterable, Identifiable { case microphone = "Kun mikrofon", digital = "Mikrofon + systemlyd"; var id: Self { self } }
     init(
@@ -98,6 +115,9 @@ final class AppStore: ObservableObject {
         shortcutController = shortcuts
         recordingShortcutController = recordingShortcuts
         dictationCoordinator = dictation
+        if let expiredIDs = try? repository.purgeExpired() {
+            for id in expiredIDs { try? recordingCatalog.deleteArtifacts(for: id) }
+        }
         let stored = (try? repository.loadAll()) ?? []
         meetings = stored
         selection = stored.first?.id
@@ -119,6 +139,9 @@ final class AppStore: ObservableObject {
         if enableBackgroundRecovery {
             recordingCatalog.enforceRetention()
             Task { await recoverInterruptedRecordings() }
+            retentionTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.enforceMeetingRetention() }
+            }
         }
         if enableFloatingRecordingBar { recordingBarController = FloatingRecordingBarController(store: self) }
         if enableMeetingDetection {
@@ -185,6 +208,7 @@ final class AppStore: ObservableObject {
     func acceptDetectedMeeting() async {
         guard let meeting = detectedMeeting, !isRecording, !isProcessing else { return }
         activeRecordingTitle = meeting.suggestedTitle
+        audioMode = .digital
         dismissDetectedMeeting()
         await startRecording()
     }
@@ -224,7 +248,7 @@ final class AppStore: ObservableObject {
                 try repository.save(meeting)
                 try recordingCatalog.markTranscriptionSucceeded(for: artifact.meetingID)
                 liveSegments = []
-                statusMessage = "Transkripsjonen er klar. Segmentert lyd kan gjenopprettes og slettes automatisk etter sju dager."
+                statusMessage = "Transkripsjonen er klar. Råopptaket slettes etter sju dager, og møteinnholdet etter 14 dager."
             } catch {
                 statusMessage = "Opptaket er bevart for gjenoppretting: \(error.localizedDescription)"
             }
@@ -459,17 +483,33 @@ final class AppStore: ObservableObject {
         }
         isProcessing = false
     }
+
+    private func enforceMeetingRetention() {
+        do {
+            let expiredIDs = try repository.purgeExpired()
+            guard !expiredIDs.isEmpty else { return }
+            for id in expiredIDs { try? recordingCatalog.deleteArtifacts(for: id) }
+            meetings.removeAll { expiredIDs.contains($0.id) }
+            if let selection, expiredIDs.contains(selection) { self.selection = meetings.first?.id }
+            statusMessage = expiredIDs.count == 1
+                ? "Et møte eldre enn 14 dager og tilhørende opptak ble slettet lokalt."
+                : "\(expiredIDs.count) møter eldre enn 14 dager og tilhørende opptak ble slettet lokalt."
+        } catch {
+            statusMessage = "Automatisk sletting av utløpte møter feilet: \(error.localizedDescription)"
+        }
+    }
 }
 
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var updater: SparkleUpdater
     @State private var confirmLogout = false
     private let canvas = SparkPalette.paper
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                HStack(spacing: 7) { Text("Spark*").font(.system(size: 23, weight: .bold, design: .rounded)); Text("NTNU").font(.system(size: 15, weight: .semibold)); Spacer(); Image(systemName: "lock.fill").foregroundStyle(.secondary).help("Lyd behandles lokalt"); Menu { Button("Logg ut av IDUN", systemImage: "rectangle.portrait.and.arrow.right") { confirmLogout = true }.disabled(store.isProcessing || store.isRecording || store.isTestingIDUN) } label: { Image(systemName: "person.crop.circle").font(.system(size: 16)).frame(width: 28, height: 28).contentShape(Rectangle()) }.menuStyle(.borderlessButton).help("Konto og onboarding") }.padding(.horizontal, 20).padding(.top, 19)
-                HStack(spacing: 7) { Text("veilederverktøy"); Text("v0.16.0").padding(.horizontal, 7).padding(.vertical, 2).background(SparkPalette.mist, in: Capsule()); Spacer() }.font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
+                HStack(spacing: 7) { Text("Spark*").font(.system(size: 23, weight: .bold, design: .rounded)); Text("NTNU").font(.system(size: 15, weight: .semibold)); Spacer(); Image(systemName: "lock.fill").foregroundStyle(.secondary).help("Lyd behandles lokalt"); Menu { Button("Se etter oppdateringer …", systemImage: "arrow.clockwise") { updater.checkForUpdates() }; Divider(); Button("Logg ut av IDUN", systemImage: "rectangle.portrait.and.arrow.right") { confirmLogout = true }.disabled(store.isProcessing || store.isRecording || store.isTestingIDUN) } label: { Image(systemName: "person.crop.circle").font(.system(size: 16)).frame(width: 28, height: 28).contentShape(Rectangle()) }.menuStyle(.borderlessButton).help("Konto og oppdateringer") }.padding(.horizontal, 20).padding(.top, 19)
+                HStack(spacing: 7) { Text("veilederverktøy"); Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.16.0")").padding(.horizontal, 7).padding(.vertical, 2).background(SparkPalette.mist, in: Capsule()); Spacer() }.font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
                 recordingPanel.padding(.horizontal, 14).padding(.bottom, 16)
                 HStack { Image(systemName: "magnifyingglass").foregroundStyle(.secondary); TextField("Søk i møter", text: $store.search).textFieldStyle(.plain) }.padding(.horizontal, 13).frame(height: 38).background(.white, in: Capsule()).overlay(Capsule().stroke(SparkPalette.stone)).padding(.horizontal, 14).padding(.bottom, 10)
                 List(store.filtered, selection: $store.selection) { meeting in MeetingRow(meeting: meeting).tag(meeting.id) }.listStyle(.sidebar)
@@ -493,7 +533,7 @@ struct ContentView: View {
             if let meeting = store.detectedMeeting {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(meeting.kind.detectionTitle, systemImage: "video.fill").font(.caption.weight(.semibold)).foregroundStyle(SparkPalette.ink)
-                    Text("Velg mikrofon eller mikrofon + systemlyd. macOS kan be om opptakstillatelse første gang.").font(.caption2).foregroundStyle(.secondary)
+                    Text("Når du starter, velges mikrofon + systemlyd slik at både din stemme og møtelyden tas opp lokalt.").font(.caption2).foregroundStyle(.secondary)
                     HStack {
                         Button("Ikke nå") { store.dismissDetectedMeeting() }
                         Spacer()
@@ -504,6 +544,10 @@ struct ContentView: View {
                 .background(SparkPalette.mist, in: RoundedRectangle(cornerRadius: 13))
             }
             Picker("Lydkilde", selection: $store.audioMode) { ForEach(AppStore.AudioMode.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().pickerStyle(.segmented)
+            if store.audioMode == .digital {
+                Text("Bruker mikrofonen som er valgt i macOS, inkludert tilkoblet Bluetooth. Systemlyd kan også inneholde annen lyd fra Mac-en.")
+                    .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            }
             if store.isRecording {
                 Label(store.audioMode == .digital ? "Tar opp mikrofon og møtelyd" : "Tar opp mikrofon", systemImage: store.audioMode == .digital ? "macbook.and.iphone" : "mic.fill")
                     .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
@@ -541,6 +585,8 @@ struct ContentView: View {
                 }
                 Spacer()
             }
+            Text("Lyd behandles lokalt. Råopptak slettes etter 7 dager; transkripsjon og analyse etter 14 dager. Eksporterte filer og sikkerhetskopier fjernes ikke. IDUN mottar tekst kun når du ber om oppsummering.")
+                .font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }.padding(14).background(.white, in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(SparkPalette.stone)).shadow(color: .black.opacity(0.04), radius: 14, y: 6)
     }
     private func format(_ seconds: Int) -> String { String(format: "%02d:%02d", seconds / 60, seconds % 60) }

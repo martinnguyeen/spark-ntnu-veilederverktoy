@@ -5,6 +5,7 @@
 work/
 outputs/*.app/
 outputs/*.zip
+outputs/*.dmg
 *.xcuserstate
 windows/node_modules/
 windows/dist/

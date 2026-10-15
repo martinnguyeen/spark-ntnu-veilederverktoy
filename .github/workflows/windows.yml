@@ -1,5 +1,6 @@
 name: Windows client
 on:
+  workflow_dispatch:
   push:
     paths: ['windows/**', 'docs/shared-contracts/**', 'scripts/install-windows.ps1', '.github/workflows/windows.yml']
   pull_request:
@@ -23,4 +24,24 @@ jobs:
       - run: node --import tsx --test tests/*.test.ts
       - run: node scripts/build.mjs
       - run: node scripts/smoke.mjs
-      - run: node scripts/package.mjs
+      - run: node scripts/installer.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spark-NTNU-Windows-x64-${{ github.sha }}
+          path: windows/release/installer/*-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
+  portable-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - run: npx --yes pnpm@11.25.0 install --frozen-lockfile --ignore-scripts
+      - run: npm run typecheck
+      - run: node --import tsx --test tests/core.test.ts
+      - run: npm run build

@@ -23,9 +23,9 @@ enum DetectedMeetingKind: String, Equatable, Sendable {
 
     var detectionTitle: String {
         switch self {
-        case .teams: "Teams-møte oppdaget"
-        case .zoom: "Zoom-møte oppdaget"
-        case .googleMeet: "Google Meet oppdaget"
+        case .teams: "Mulig Teams-møte"
+        case .zoom: "Mulig Zoom-møte"
+        case .googleMeet: "Mulig Google Meet-møte"
         }
     }
 }
@@ -176,7 +176,7 @@ final class MeetingPromptController {
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.setContentSize(size)
-        panel.setAccessibilityLabel("Digitalt møte oppdaget")
+        panel.setAccessibilityLabel("Mulig digital møtekontekst")
         return panel
     }
 
@@ -198,11 +198,11 @@ private struct MeetingPromptView: View {
                 Image(systemName: "video.fill").foregroundStyle(SparkPalette.orange).font(.title2)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(meeting.kind.detectionTitle).font(.headline)
-                    Text("Vil du starte et lokalt møteopptak?").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Dette vinduet kan være et møte. Spark starter ikke opptak før du velger Start.").font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
             }
-            Text("Velg «Mikrofon + systemlyd» for å ta opp begge sider av samtalen lokalt. macOS kan be om opptakstillatelse første gang.")
+            Text("Når du velger Start, tas valgt mikrofon og systemlyd opp lokalt. Systemlyd kan også inneholde annen Mac-lyd. macOS kan be om tillatelse første gang.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Ikke nå") { store.dismissDetectedMeeting() }.buttonStyle(.bordered)

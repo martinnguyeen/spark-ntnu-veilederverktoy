@@ -57,12 +57,14 @@ final class MeetingDetectionTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-detection-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let recorder = MeetingDetectionTestRecorder()
+        let digitalRecorder = MeetingDetectionTestRecorder()
         let store = AppStore(
             repository: JSONMeetingRepository(root: root.appendingPathComponent("meetings")),
             enableGlobalDictation: false,
             enableBackgroundRecovery: false,
             recordingRootDirectory: root,
             recorder: recorder,
+            digitalRecorder: digitalRecorder,
             enableFloatingRecordingBar: false,
             enableRecordingHotkey: false,
             enableMeetingDetection: false
@@ -74,7 +76,9 @@ final class MeetingDetectionTests: XCTestCase {
         XCTAssertEqual(recorder.startCount, 0)
 
         await store.acceptDetectedMeeting()
-        XCTAssertEqual(recorder.startCount, 1)
+        XCTAssertEqual(recorder.startCount, 0)
+        XCTAssertEqual(digitalRecorder.startCount, 1)
+        XCTAssertEqual(store.audioMode, .digital)
         XCTAssertTrue(store.isRecording)
         XCTAssertNil(store.detectedMeeting)
     }

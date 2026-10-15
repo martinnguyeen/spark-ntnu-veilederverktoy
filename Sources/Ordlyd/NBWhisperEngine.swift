@@ -5,8 +5,8 @@ enum NBWhisperError: LocalizedError {
     case modelMissing, runtimeMissing, recordingPermissionDenied, recordingFailed, transcriptionFailed(String), emptyTranscript
     var errorDescription: String? {
         switch self {
-        case .modelMissing: return "NB-Whisper-modellen mangler. Installer modellen før du transkriberer."
-        case .runtimeMissing: return "whisper.cpp mangler. Installer whisper-cpp med Homebrew."
+        case .modelMissing: return "Den lokale NB-Whisper-modellen mangler. Last ned Spark-installasjonen på nytt, eller kontakt brukerstøtte."
+        case .runtimeMissing: return "Den lokale transkripsjonsmotoren mangler. Installer Spark på nytt, eller kontakt brukerstøtte."
         case .recordingPermissionDenied: return "Ordlyd trenger mikrofontilgang for å ta opp lyd."
         case .recordingFailed: return "Opptaket kunne ikke startes. Kontroller valgt mikrofon."
         case .transcriptionFailed(let detail): return "Lokal transkripsjon mislyktes. \(detail)"
@@ -42,11 +42,14 @@ struct NBWhisperEngine: SpeechEngine {
 
     static var installed: NBWhisperEngine {
         let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Ordlyd/Models/nb-whisper-small-beta/ggml-model.bin")
-        return NBWhisperEngine(executableURL: Self.whisperExecutableURL, modelURL: support)
+        let bundledModel = Bundle.main.resourceURL?.appendingPathComponent("ggml-model.bin")
+        let model = bundledModel.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } ?? support
+        return NBWhisperEngine(executableURL: Self.whisperExecutableURL, modelURL: model)
     }
 
     static var whisperExecutableURL: URL {
-        let candidates = [
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/whisper-cli")
+        let candidates = [bundled.path,
             "/opt/homebrew/bin/whisper-cli", // Apple Silicon Homebrew
             "/usr/local/bin/whisper-cli"     // Intel Homebrew
         ] + (ProcessInfo.processInfo.environment["PATH"] ?? "")
@@ -67,6 +70,12 @@ struct NBWhisperEngine: SpeechEngine {
             let diagnostics = Pipe()
             process.executableURL = executableURL
             process.arguments = ["-m", modelURL.path, "-f", url.path, "-l", "no", "-oj", "-of", outputRoot.path, "-np"]
+            let bundledBackends = executableURL.deletingLastPathComponent().appendingPathComponent("ggml-backends", isDirectory: true)
+            if let backend = (try? FileManager.default.contentsOfDirectory(at: bundledBackends, includingPropertiesForKeys: nil))?.first(where: { $0.lastPathComponent.hasPrefix("libggml-cpu") && $0.pathExtension == "so" }) {
+                var environment = ProcessInfo.processInfo.environment
+                environment["GGML_BACKEND_PATH"] = backend.path
+                process.environment = environment
+            }
             process.standardOutput = Pipe(); process.standardError = diagnostics
             try process.run(); process.waitUntilExit()
             guard process.terminationStatus == 0 else {

@@ -1,0 +1,131 @@
+name: Release macOS
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing version tag to rebuild (for example v0.17.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spark-macos-release-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish signed macOS release
+    runs-on: macos-15
+    env:
+      VERSION: ${{ github.event.inputs.version || github.ref_name }}
+      RELEASE_TAG: ${{ github.event.inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+          fetch-depth: 0
+
+      - name: Validate release settings
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+          REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          VERSION_NUMBER="${VERSION#v}"
+          [[ "$VERSION_NUMBER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must look like v0.17.0." >&2; exit 1; }
+          [[ "$(uname -m)" == "arm64" ]] || { echo "This release workflow expects an Apple Silicon runner." >&2; exit 1; }
+          [[ "$REPOSITORY_IS_PRIVATE" == "false" ]] || { echo "Sparkle updates need anonymously accessible GitHub Releases. Make the repo public before publishing." >&2; exit 1; }
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID SPARKLE_EDDSA_PRIVATE_KEY; do
+            if [[ -z "${!name:-}" ]]; then echo "Missing GitHub secret/variable: $name" >&2; exit 1; fi
+          done
+
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/spark-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$CERTIFICATE_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -nE 's/.*"(Developer ID Application: .*)"/\1/p' | head -1)"
+          [[ -n "$SIGNING_IDENTITY" ]] || { echo 'No Developer ID Application identity was imported.' >&2; exit 1; }
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Install Whisper build dependency
+        run: brew install whisper.cpp
+
+      - name: Build, sign, notarize, and package Spark
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: ./scripts/build-dmg.sh
+
+      - name: Generate EdDSA-signed Sparkle feed
+        shell: bash
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION_NUMBER="${VERSION#v}"
+          ZIP="outputs/Spark-NTNU-macOS-arm64-${VERSION_NUMBER}.zip"
+          UPDATE_DIR="$RUNNER_TEMP/sparkle-updates"
+          mkdir -p "$UPDATE_DIR"
+          cp "$ZIP" "$UPDATE_DIR/"
+          GENERATE_APPCAST="$(find .build/artifacts -type f -name generate_appcast -print -quit)"
+          [[ -x "$GENERATE_APPCAST" ]] || { echo 'Sparkle generate_appcast is missing from the resolved package.' >&2; exit 1; }
+          printf '%s' "$SPARKLE_EDDSA_PRIVATE_KEY" | "$GENERATE_APPCAST" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/" \
+            "$UPDATE_DIR"
+          [[ -s "$UPDATE_DIR/appcast.xml" ]] || { echo 'Sparkle did not create appcast.xml.' >&2; exit 1; }
+          cp "$UPDATE_DIR/appcast.xml" outputs/appcast.xml
+          cp "$ZIP" outputs/Spark-NTNU-macOS-arm64-latest.zip
+          cp "outputs/Spark-NTNU-macOS-arm64-${VERSION_NUMBER}.dmg" outputs/Spark-NTNU-macOS-arm64-latest.dmg
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION_NUMBER="${TAG#v}"
+          ASSETS=(
+            "outputs/Spark-NTNU-macOS-arm64-${VERSION_NUMBER}.dmg"
+            "outputs/Spark-NTNU-macOS-arm64-${VERSION_NUMBER}.zip"
+            outputs/Spark-NTNU-macOS-arm64-latest.dmg
+            outputs/Spark-NTNU-macOS-arm64-latest.zip
+            outputs/appcast.xml
+          )
+          for asset in "${ASSETS[@]}"; do [[ -s "$asset" ]] || { echo "Release asset missing: $asset" >&2; exit 1; }; done
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --title "Spark $VERSION_NUMBER" --generate-notes --latest
+          fi
+
+      - name: Remove signing keychain
+        if: always()
+        shell: bash
+        run: security delete-keychain "$RUNNER_TEMP/spark-signing.keychain-db" 2>/dev/null || true

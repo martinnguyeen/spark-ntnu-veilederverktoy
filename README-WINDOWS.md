@@ -1,6 +1,6 @@
 # Spark NTNU for Windows – installasjon og testing
 
-Denne veiledningen gjelder Windows-klienten 0.2.0 på grenen `feature/windows-client`. Målet er å teste installasjon og vanlig bruk på en Windows-maskin. Appen er en usignert testversjon. Lokal transkripsjon er testet automatisk, men fysisk mikrofon, systemlyd og faktisk IDUN-tilkobling må fortsatt verifiseres.
+Denne veiledningen gjelder Windows-klienten 0.2.0 på grenen `main`. Målet er å teste installasjon og vanlig bruk på en Windows-maskin. Appen er en usignert testversjon. Lokal transkripsjon er testet automatisk, men fysisk mikrofon, systemlyd og faktisk IDUN-tilkobling må fortsatt verifiseres.
 
 ## Rask installasjon uten terminal
 
@@ -21,7 +21,7 @@ Resten av installasjonskapitlene nedenfor gjelder bygging fra kildekoden, som et
 - Tilgang til GitHub-repoet dersom det er privat. Fullfør GitHub-innlogging hvis Git ber om det.
 - Du trenger ikke installere Node selv eller starte PowerShell som administrator.
 
-**Til den som deler testen:** Del grenen `feature/windows-client`, som inneholder Windows-filene og denne veiledningen. En lokal test er ikke bevis på at installasjonen fra GitHub fungerer; test også kloning og oppsett på en annen Windows-maskin.
+**Til den som deler testen:** Del grenen `main`, som inneholder Windows-filene og denne veiledningen. En lokal test er ikke bevis på at installasjonen fra GitHub fungerer; test også kloning og oppsett på en annen Windows-maskin.
 
 Bruk ufølsom testtekst og avtalte testopptak. IDUN er valgfritt og er ikke nødvendig for lokal transkripsjon.
 
@@ -30,7 +30,7 @@ Bruk ufølsom testtekst og avtalte testopptak. IDUN er valgfritt og er ikke nød
 Åpne **PowerShell** eller en PowerShell-fane i Windows Terminal. Kjør kommandoene én om gangen. Stopp hvis en kommando feiler.
 
 ```powershell
-git clone --branch feature/windows-client https://github.com/martinnguyeen/spark-ntnu-veilederverktoy.git
+git clone --branch main https://github.com/martinnguyeen/spark-ntnu-veilederverktoy.git
 cd spark-ntnu-veilederverktoy
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -ProvisionModel
 ```
@@ -137,7 +137,7 @@ Windows bruker en av/på-snarvei og manuell innliming. Macs hold/slipp-tast og a
 Det finnes ikke automatisk oppdatering. Når en ny versjon er pushet, lukk Spark og kjør fra repo-mappen:
 
 ```powershell
-git switch feature/windows-client
+git switch main
 git pull --ff-only
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 -ProvisionModel
 ```

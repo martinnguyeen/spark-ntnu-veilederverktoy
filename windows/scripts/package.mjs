@@ -2,6 +2,7 @@ import { cp, mkdir, rename, writeFile, access, readFile } from 'node:fs/promises
 import { NtExecutable, NtExecutableResource, Data, Resource } from 'resedit';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
+if (process.platform !== 'win32') throw new Error('Windows packaging must run on Windows. Use the Windows client GitHub Actions workflow from other devices.');
 const require = createRequire(import.meta.url);
 const electronExe = require('electron');
 const { dirname } = await import('node:path');

@@ -1,5 +1,7 @@
 # Spark NTNU for Windows
 
+**Arbeid fra Mac, Linux eller en annen Windows-PC:** [Utviklerveiledning](DEVELOPMENT.md). All Windows implementation and build scripts live in this folder; GitHub Actions can produce a test installer for you.
+
 For norsk trinnvis installasjon og manuell testing, se [README for Windows](../README-WINDOWS.md). This document covers technical setup and implementation details.
 
 Electron/TypeScript Windows-only client. The existing Swift macOS application stays unchanged.

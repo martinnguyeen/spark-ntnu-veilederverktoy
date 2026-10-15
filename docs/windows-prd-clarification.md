@@ -94,6 +94,16 @@ The Whisper download/install experience is a release-blocking requirement.
 - Ask for recording permissions at the point of use, show an unmistakable recording indicator, and require a user action before capture begins.
 - Keep recordings, transcript data, and model files outside the repository and out of diagnostic uploads.
 
+## Release and update requirements
+
+- Use GitHub Releases as the Windows installer and update source, matching the macOS release cadence.
+- Package the app as an x64 NSIS installer with `electron-builder`; preserve per-user local meeting/model storage during an in-place update.
+- Use `electron-updater` with the GitHub Releases provider. Show a manual **Se etter oppdateringer** command and allow users to review, download, and install an available release. Never install an update while recording or transcribing.
+- Include the installer, `latest.yml`, and any `.blockmap` assets in the versioned GitHub Release. Keep the version in `package.json` aligned with the `vX.Y.Z` tag.
+- Do not embed a GitHub token in the app. GitHub Releases must be public for unattended checks by testers; a private repository needs a separate public update host or an authenticated update service.
+- The macOS Sparkle client and future Windows `electron-updater` client may share the same public GitHub Release, while retaining their platform-specific feeds and installer formats.
+- The current `.github/workflows/release.yml` builds macOS only. Add a separate Windows release job after the Windows client and its update flow are implemented and tested; adding a package manifest alone is not release-ready.
+
 ## Proposed Windows onboarding
 
 1. Welcome and explain that transcription runs locally.
